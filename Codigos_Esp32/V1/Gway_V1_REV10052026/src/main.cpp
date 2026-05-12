@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
-
+#include "TcpClient.h"
 #include "WiFiManager.h"
 #include "Console.h"
 
@@ -34,6 +34,7 @@ volatile AppState appState = APP_SETUP;
 const char *ssid     = "R E D";
 const char *password = "ferrariyhamilton44";
 
+
 /*
 =========================================================
                     TASK HANDLES
@@ -57,19 +58,11 @@ void TaskLogger(void *pvParameters);
 void initializeHardware();
 void initializeServices();
 
-/*
-=========================================================
-                        SETUP
-=========================================================
-*/
+
 
 void setup()
 {
-    /*
-        UART DEBUG
-        UART0 -> GPIO1 TX
-                  GPIO3 RX
-    */
+
     Console::setDebug(true);
     Console::start(115200);
 
@@ -135,16 +128,14 @@ void TaskNetwork(void *pvParameters)
     */
     WiFiManager::setSSID(ssid);
     WiFiManager::setPassword(password);
+    TcpClient::setServer("10.175.140.169",9876);
 
     /*
         Start WiFi
     */
     WiFiManager::begin();
 
-    /*
-        MQTT Init
-    */
-    // MqttService::setDebug(1);
+    bool tcpStarted = false;   
 
     for (;;)
     {
@@ -155,11 +146,30 @@ void TaskNetwork(void *pvParameters)
         */
         WiFiManager::loop();
 
-        /*
-            IMPORTANT:
-            NEVER SATURATE CORE 0
-        */
-        vTaskDelay(pdMS_TO_TICKS(10));
+        if (WiFiManager::isConnected())
+        {
+          Console::writeln("NET> WiFi Connected");
+          Console::write("NET> IP: ");
+                Console::writeln(WiFi.localIP().toString());
+
+            if (!tcpStarted)
+            {
+                Console::writeln("NET> Starting TCP Client...");
+                TcpClient::connect();
+                tcpStarted = true;
+            }
+            TcpClient::update();
+            if(TcpClient::isConnected())
+            {
+                Console::writeln("NET> TCP Connected");
+            }
+            else
+            {
+                Console::writeln("NET> TCP Disconnected");
+                tcpStarted = false;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -186,23 +196,21 @@ void TaskApplication(void *pvParameters)
             initializeServices();
 
             appState = APP_START;
-
             break;
 
         case APP_START:
 
             Console::writeln("APP> STATE_START");
-
             appState = APP_RUN;
 
             break;
 
         case APP_RUN:
-
-        
+        if (TcpClient::isConnected())
+    {
+        TcpClient::send("ESP32 MESSAGE");
+    }
             digitalWrite(LED_RED, !digitalRead(LED_RED));
-
-
             vTaskDelay(pdMS_TO_TICKS(1000));
 
             break;
@@ -237,6 +245,7 @@ void TaskLogger(void *pvParameters)
             - Remote debug
             - Ring buffers
         */
+       
 
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
