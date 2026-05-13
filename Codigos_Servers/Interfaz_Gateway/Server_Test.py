@@ -32,7 +32,7 @@ def handle_client(conn, addr):
             print(f"[RX {addr}] -> {message}")
 
             # Respuesta opcional
-            response = f"ACK: {message}"
+            response = "ACK: Server Response "
 
             conn.send(response.encode('ascii'))
 
